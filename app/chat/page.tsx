@@ -71,9 +71,10 @@ export default function ChatPage() {
 
   async function upload(file: File) {
     const data = new FormData();
+    const revisionFromFilename = file.name.match(/rev(?:ision)?[_\s-]*([0-9]+(?:\.[0-9]+)?)/i)?.[1];
     data.append("file", file);
     data.append("status", "active");
-    data.append("revision", "1.0");
+    data.append("revision", revisionFromFilename ?? "1.0");
     setNotice(`Indexing ${file.name}...`);
     try {
       const response = await fetch(`${API}/api/documents`, { method: "POST", body: data });
