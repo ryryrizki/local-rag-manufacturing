@@ -1,0 +1,7 @@
+question_id,question,expected_document,expected_revision,expected_page,answerable,reference_answer
+Q001,What is the tightening torque for M12 bolts?,Work Standard Assembly Process,2.1,12,1,80 N·m
+Q002,Which revision of the assembly work standard is currently active?,Work Standard Assembly Process,2.1,,1,Revision 2.1
+Q003,What was the M12 tightening torque in the superseded revision?,Work Standard Assembly Process,1.0,,1,Populate after document verification
+Q004,What PPE is required before starting the hydraulic assembly procedure?,Hydraulic Assembly Procedure,1.3,,1,Populate after document verification
+Q005,What is the cafeteria lunch menu?,,,,0,
+
