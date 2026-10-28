@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from config import ANSWERABILITY_THRESHOLD
-from database import init_db
+from database import connect, init_db
 from services.generation import generate
 from services.ingestion import ingest
 from services.retrieval import search
@@ -12,6 +12,29 @@ init_db()
 
 @app.get("/api/health")
 def health(): return jsonify({"status": "ok"})
+
+@app.get("/api/documents")
+def list_documents():
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                d.id,
+                d.title,
+                d.filename,
+                d.revision,
+                d.status,
+                d.effective_date,
+                d.created_at,
+                COUNT(c.id) AS chunk_count,
+                COUNT(DISTINCT c.page) AS page_count
+            FROM documents d
+            LEFT JOIN chunks c ON c.document_id = d.id
+            GROUP BY d.id
+            ORDER BY d.created_at DESC, d.id DESC
+            """
+        ).fetchall()
+    return jsonify({"documents": [dict(row) for row in rows]})
 
 @app.post("/api/documents")
 def upload_document():
