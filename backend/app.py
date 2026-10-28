@@ -26,10 +26,10 @@ def query():
     payload = request.get_json(silent=True) or {}; question = str(payload.get("question", "")).strip()
     if not question: return jsonify({"error": "question is required"}), 400
     sources, retrieval_ms = search(question, mode=payload.get("mode", "revision_aware"), top_k=int(payload.get("top_k", 3)))
-    if not sources or sources[0]["score"] < ANSWERABILITY_THRESHOLD:
+    if not sources or sources[0]["semantic_similarity"] < ANSWERABILITY_THRESHOLD:
         return jsonify({"answer": "The indexed documents do not provide sufficient evidence to answer this question.", "answerable": False, "sources": sources, "retrieval_ms": retrieval_ms})
     answer = generate(question, sources)
-    public_sources = [{key: source[key] for key in ("document_title", "revision", "page", "score", "status")} for source in sources]
+    public_sources = [{key: source[key] for key in ("document_title", "revision", "page", "score", "semantic_similarity", "status")} for source in sources]
     return jsonify({"answer": answer, "answerable": True, "sources": public_sources, "retrieval_ms": retrieval_ms})
 
 if __name__ == "__main__": app.run(host="0.0.0.0", port=5000, debug=True)

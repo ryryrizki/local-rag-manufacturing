@@ -30,6 +30,10 @@ def search(question: str, mode: str = "revision_aware", top_k: int = 3):
     order = np.argsort(score)[::-1][:top_k]
     results = []
     for index in order:
-        item = rows[int(index)]; item.pop("embedding", None); item["score"] = float(score[index]); results.append(item)
+        item = rows[int(index)]
+        item.pop("embedding", None)
+        item["score"] = float(score[index])
+        item["semantic_similarity"] = float(semantic[index])
+        results.append(item)
     return results, (time.perf_counter() - started) * 1000
 

@@ -4,39 +4,51 @@ A local, privacy-preserving Retrieval-Augmented Generation (RAG) prototype for s
 
 ## Research scope
 
-The system is designed to:
+The system can ingest work standards, process instructions, manuals, and specifications; retrieve relevant passages; generate grounded answers with page-level citations; distinguish active and historical revisions; and reject unsupported questions.
 
-- ingest work standards, process instructions, manuals, and product specifications;
-- retrieve relevant passages using semantic and keyword search;
-- generate grounded answers with page-level citations;
-- distinguish active and historical document revisions;
-- reject questions unsupported by indexed documents; and
-- run locally so internal knowledge remains on the operator's machine.
-
-## Planned architecture
+## Architecture
 
 - **Frontend:** Next.js and TypeScript
-- **Backend:** Python API
-- **Retrieval:** semantic search, BM25, and reranking
+- **Backend:** Python and Flask
+- **Retrieval:** semantic search, BM25, and revision-aware ranking
 - **Generation:** local LLM through Ollama
-- **Storage:** local metadata, document chunks, and vector index
+- **Storage:** local SQLite metadata, chunks, and embeddings
+
+## Quick start
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt
+python app.py
+```
+
+The first indexing request downloads the configured embedding model. Install Ollama separately and pull the model declared in `.env.example` to enable generated answers. If Ollama is unavailable, the API transparently returns the strongest retrieved evidence.
+
+### Frontend
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`, upload an approved PDF, DOCX, or TXT document, and ask a question.
 
 ## Minimum experiment
 
-The initial study compares:
+The initial experiment compares semantic-only, hybrid, and revision-aware hybrid retrieval. Metrics include Hit@3, correct-revision@3, answerability accuracy, citation accuracy, and retrieval latency.
 
-1. semantic-only retrieval;
-2. hybrid semantic + BM25 retrieval; and
-3. revision-aware hybrid retrieval.
+1. Index the frozen manufacturing document collection.
+2. Copy `evaluation/gold_standard_template.csv` to `evaluation/gold_standard.csv`.
+3. Manually verify every expected document, revision, page, and reference answer.
+4. Run `python evaluation/run_retrieval_experiment.py`.
 
-An initial set of approximately 15 manufacturing questions will be evaluated using Hit@3, answer accuracy, correct-revision rate, citation accuracy, unsupported-query rejection, and response latency.
+Do not report illustrative template values as empirical results.
 
 ## Data policy
 
-Do not commit company documents, credentials, uploaded files, local databases, vector indexes, model files, private evaluation keys, or confidential experiment output.
-
-Synthetic or explicitly approved sample documents may be stored under `examples/`.
-
-## Status
-
-Repository initialized for the manufacturing RAG migration.
+Never commit company documents, credentials, uploads, local databases, vector indexes, model files, private evaluation keys, or confidential experiment outputs. Synthetic or explicitly approved samples may be stored under `examples/`.
