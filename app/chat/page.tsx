@@ -3,7 +3,7 @@
 import {
   Bot, CircleHelp, Database, FileSearch, FileText, Files, Info, Loader2,
   MessageSquare, RefreshCw, Search, Send, Settings, Sparkles,
-  ThumbsDown, ThumbsUp, Trash2, UploadCloud,
+  ThumbsDown, ThumbsUp, Trash2, UploadCloud, X,
 } from "lucide-react";
 import { FormEvent, useRef, useState } from "react";
 
@@ -27,6 +27,18 @@ type Answer = {
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+type IndexedDocument = {
+  id: number;
+  title: string;
+  filename: string;
+  revision: string;
+  status: string;
+  effective_date?: string | null;
+  created_at: string;
+  chunk_count: number;
+  page_count: number;
+};
+
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
 const suggestedQuestions = [
   "What is the maximum permitted hydraulic pressure?",
@@ -42,6 +54,9 @@ export default function ChatPage() {
   const [activeQuestion, setActiveQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [documents, setDocuments] = useState<IndexedDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const [systemStatus, setSystemStatus] = useState<"ready" | "checking" | "offline">("ready");
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -88,6 +103,7 @@ export default function ChatPage() {
         ? `${body.document_title} is already indexed.`
         : `${body.document_title} indexed successfully (${body.chunk_count} chunks).`);
       setSystemStatus("ready");
+      if (showDocuments) await openDocuments();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Document upload failed.");
       setSystemStatus("offline");
@@ -108,6 +124,23 @@ export default function ChatPage() {
     }
   }
 
+  async function openDocuments() {
+    setShowDocuments(true);
+    setDocumentsLoading(true);
+    try {
+      const response = await fetch(`${API}/api/documents`);
+      if (!response.ok) throw new Error(await response.text());
+      const body = await response.json();
+      setDocuments(body.documents ?? []);
+      setSystemStatus("ready");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not load indexed documents.");
+      setSystemStatus("offline");
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }
+
   function clearChat() {
     setMessages([]);
     setResult(null);
@@ -121,7 +154,7 @@ export default function ChatPage() {
   return (
     <main className="h-screen min-h-[680px] overflow-hidden bg-[#f2f5fa] text-slate-900">
       <div className="mx-auto flex h-full max-w-[1680px] bg-white shadow-[0_0_40px_rgba(15,23,42,0.06)]">
-        <Sidebar onUpload={() => fileInput.current?.click()} />
+        <Sidebar onManageDocuments={openDocuments} />
         <section className="flex min-w-0 flex-1 flex-col">
           <TopBar status={systemStatus} onInitialize={initializeSystem} onUpload={() => fileInput.current?.click()} />
           <input
@@ -135,6 +168,15 @@ export default function ChatPage() {
               event.target.value = "";
             }}
           />
+
+          {showDocuments && (
+            <DocumentLibrary
+              documents={documents}
+              loading={documentsLoading}
+              onClose={() => setShowDocuments(false)}
+              onUpload={() => fileInput.current?.click()}
+            />
+          )}
 
           <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(560px,1fr)_380px]">
             <section className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
@@ -200,7 +242,7 @@ export default function ChatPage() {
   );
 }
 
-function Sidebar({ onUpload }: { onUpload: () => void }) {
+function Sidebar({ onManageDocuments }: { onManageDocuments: () => void }) {
   return (
     <aside className="hidden w-[226px] shrink-0 flex-col bg-[#102b52] text-white lg:flex">
       <div className="flex h-[72px] items-center gap-3 border-b border-white/10 px-5">
@@ -211,7 +253,7 @@ function Sidebar({ onUpload }: { onUpload: () => void }) {
         <p className="mb-2 px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-200/50">Main</p>
         <SidebarItem icon={<MessageSquare size={15} />} label="Chat" active />
         <p className="mb-2 mt-6 px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-200/50">Knowledge</p>
-        <SidebarItem icon={<Files size={15} />} label="Manage Documents" onClick={onUpload} />
+        <SidebarItem icon={<Files size={15} />} label="Manage Documents" onClick={onManageDocuments} />
         <SidebarItem icon={<FileSearch size={15} />} label="Document Search" />
         <p className="mb-2 mt-6 px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-200/50">System</p>
         <SidebarItem icon={<Info size={15} />} label="System Info" />
@@ -259,12 +301,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 function EvidencePanel({ result, activeSource, selectedSource, query, onSelectSource }: { result: Answer | null; activeSource?: Source; selectedSource: number; query: string; onSelectSource: (index: number) => void }) {
+  const documentCount = result ? new Set(result.sources.map((source) => source.document_title)).size : 0;
+  const evidenceSummary = result?.sources.length
+    ? `${documentCount} document${documentCount === 1 ? "" : "s"} · ${result.sources.length} passages`
+    : undefined;
   return (
     <aside className="hidden min-h-0 flex-col gap-3 overflow-y-auto bg-[#f7f9fc] p-3 xl:flex">
-      <Panel title="Top Sources" subtitle={result?.retrieval_ms ? `${result.retrieval_ms.toFixed(0)} ms retrieval` : undefined}>
+      <Panel title="Top Sources" subtitle={evidenceSummary}>
         {result?.sources.length ? <div className="space-y-2">{result.sources.map((source, index) => (
           <button key={`${source.document_title}-${source.page}-${index}`} type="button" onClick={() => onSelectSource(index)} className={`w-full rounded-lg border p-3 text-left transition ${selectedSource === index ? "border-blue-200 bg-blue-50 shadow-sm" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
-            <div className="flex items-start gap-2.5"><div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-blue-600 shadow-sm"><FileText size={14} /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-slate-700">{source.document_title}</p><p className="mt-1 text-[10px] text-slate-400">Rev. {source.revision} · p.{source.page} · {source.status}</p></div><span className="text-[10px] font-medium text-blue-600">{source.score.toFixed(2)}</span></div>
+            <div className="flex items-start gap-2.5"><div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-blue-600 shadow-sm"><FileText size={14} /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-slate-700">{source.document_title}</p><p className="mt-1 text-[10px] text-slate-400">Page {source.page} · Passage {index + 1} · Rev. {source.revision}</p></div><span className="text-[10px] font-medium text-blue-600">{source.score.toFixed(2)}</span></div>
           </button>
         ))}</div> : <EmptyPanel icon={<Search size={18} />} text="Ask a question to retrieve relevant sources." />}
       </Panel>
@@ -296,6 +342,39 @@ function Panel({ title, subtitle, action, grow, children }: { title: string; sub
 
 function EmptyPanel({ icon, text, compact }: { icon: React.ReactNode; text: string; compact?: boolean }) {
   return <div className={`flex flex-col items-center justify-center text-center text-slate-300 ${compact ? "min-h-16" : "min-h-24"}`}><span>{icon}</span><p className="mt-2 max-w-[230px] text-[10px] leading-4">{text}</p></div>;
+}
+
+function DocumentLibrary({ documents, loading, onClose, onUpload }: { documents: IndexedDocument[]; loading: boolean; onClose: () => void; onUpload: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <section className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div><h2 className="text-base font-semibold">Indexed Documents</h2><p className="mt-0.5 text-xs text-slate-400">Files currently available to the local RAG system</p></div>
+          <div className="flex items-center gap-2"><button type="button" onClick={onUpload} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-medium text-white hover:bg-blue-700"><UploadCloud size={14} /> Add document</button><button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={17} /></button></div>
+        </header>
+        <div className="max-h-[65vh] overflow-y-auto p-5">
+          {loading ? <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={17} /> Loading indexed documents...</div>
+            : documents.length ? <div className="space-y-3">{documents.map((document) => (
+              <article key={document.id} className="rounded-xl border border-slate-200 p-4 transition hover:border-blue-200 hover:shadow-sm">
+                <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><FileText size={18} /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-sm font-semibold text-slate-800">{document.title}</h3><p className="mt-0.5 truncate text-xs text-slate-400">{document.filename}</p></div><span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase text-emerald-700">{document.status}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500 sm:grid-cols-5"><DocumentStat label="Revision" value={document.revision} /><DocumentStat label="Pages" value={String(document.page_count)} /><DocumentStat label="Chunks" value={String(document.chunk_count)} /><DocumentStat label="Effective" value={document.effective_date || "Not set"} /><DocumentStat label="Indexed" value={formatIndexedDate(document.created_at)} /></div></div></div>
+              </article>
+            ))}</div>
+            : <div className="flex min-h-48 flex-col items-center justify-center text-center"><Files size={24} className="text-slate-300" /><h3 className="mt-3 text-sm font-medium text-slate-700">No indexed documents</h3><p className="mt-1 text-xs text-slate-400">Upload a PDF, DOCX, or TXT file to begin.</p></div>}
+        </div>
+        <footer className="border-t border-slate-100 bg-slate-50 px-6 py-3 text-[10px] text-slate-400">One uploaded file may produce multiple retrieval passages because documents are divided into searchable chunks.</footer>
+      </section>
+    </div>
+  );
+}
+
+function DocumentStat({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-[9px] uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 truncate font-medium text-slate-700">{value}</p></div>;
+}
+
+function formatIndexedDate(value: string) {
+  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }
 
 function HighlightedText({ text, query, answer }: { text: string; query: string; answer: string }) {
