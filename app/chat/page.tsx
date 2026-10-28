@@ -8,12 +8,14 @@ import {
 import { FormEvent, useRef, useState } from "react";
 
 type Source = {
+  chunk_id?: number;
   document_title: string;
   revision: string;
   page: number;
   score: number;
   semantic_similarity?: number;
   status: string;
+  content?: string;
 };
 
 type Answer = {
@@ -37,6 +39,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [result, setResult] = useState<Answer | null>(null);
   const [selectedSource, setSelectedSource] = useState(0);
+  const [activeQuestion, setActiveQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [systemStatus, setSystemStatus] = useState<"ready" | "checking" | "offline">("ready");
@@ -48,6 +51,7 @@ export default function ChatPage() {
     if (!prompt || loading) return;
     setMessages((current) => [...current, { role: "user", content: prompt }]);
     setQuestion("");
+    setActiveQuestion(prompt);
     setNotice("");
     setLoading(true);
     try {
@@ -108,6 +112,7 @@ export default function ChatPage() {
     setMessages([]);
     setResult(null);
     setQuestion("");
+    setActiveQuestion("");
     setNotice("");
   }
 
@@ -181,7 +186,13 @@ export default function ChatPage() {
               </div>
             </section>
 
-            <EvidencePanel result={result} activeSource={activeSource} selectedSource={selectedSource} onSelectSource={setSelectedSource} />
+            <EvidencePanel
+              result={result}
+              activeSource={activeSource}
+              selectedSource={selectedSource}
+              query={activeQuestion}
+              onSelectSource={setSelectedSource}
+            />
           </div>
         </section>
       </div>
@@ -247,7 +258,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return <div className="flex max-w-[92%] items-start gap-3"><div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600"><Bot size={16} /></div><div className="rounded-2xl rounded-tl-md border border-slate-100 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{message.content}</div></div>;
 }
 
-function EvidencePanel({ result, activeSource, selectedSource, onSelectSource }: { result: Answer | null; activeSource?: Source; selectedSource: number; onSelectSource: (index: number) => void }) {
+function EvidencePanel({ result, activeSource, selectedSource, query, onSelectSource }: { result: Answer | null; activeSource?: Source; selectedSource: number; query: string; onSelectSource: (index: number) => void }) {
   return (
     <aside className="hidden min-h-0 flex-col gap-3 overflow-y-auto bg-[#f7f9fc] p-3 xl:flex">
       <Panel title="Top Sources" subtitle={result?.retrieval_ms ? `${result.retrieval_ms.toFixed(0)} ms retrieval` : undefined}>
@@ -259,11 +270,21 @@ function EvidencePanel({ result, activeSource, selectedSource, onSelectSource }:
       </Panel>
 
       <Panel title="Document Preview" action={activeSource ? <FileText size={13} /> : undefined} grow>
-        {activeSource ? <div className="flex h-full min-h-[190px] items-center justify-center rounded-lg bg-slate-50 p-4"><div className="relative h-40 w-28 rounded-sm border border-slate-200 bg-white p-3 shadow-sm"><div className="h-2 w-14 rounded bg-blue-100" /><div className="mt-3 space-y-2">{[82, 68, 76, 54, 72, 62].map((width, index) => <div key={index} className="h-1 rounded bg-slate-100" style={{ width: `${width}%` }} />)}</div><div className="absolute bottom-2 right-2 rounded bg-blue-600 px-1.5 py-0.5 text-[8px] font-semibold text-white">p.{activeSource.page}</div></div></div> : <EmptyPanel icon={<FileText size={18} />} text="Select a source to preview its document page." />}
+        {activeSource ? (
+          <div className="flex h-full min-h-[210px] flex-col overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
+              <div className="min-w-0"><p className="truncate text-[10px] font-medium text-slate-700">{activeSource.document_title}</p><p className="mt-0.5 text-[9px] text-slate-400">Page {activeSource.page} · Rev. {activeSource.revision}</p></div>
+              <span className="ml-2 shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-600">{(activeSource.semantic_similarity ?? activeSource.score).toFixed(1)} relevance</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white p-3 text-[10px] leading-[1.65] text-slate-600">
+              {activeSource.content ? <HighlightedText text={activeSource.content} query={query} answer={result?.answer ?? ""} /> : <p className="text-center text-slate-400">Restart the updated backend to display retrieved document text.</p>}
+            </div>
+          </div>
+        ) : <EmptyPanel icon={<FileText size={18} />} text="Select a source to preview its document text." />}
       </Panel>
 
       <Panel title="Document Info">
-        {activeSource ? <dl className="grid grid-cols-[92px_1fr] gap-x-3 gap-y-2.5 text-[11px]"><dt className="text-slate-400">Document</dt><dd className="truncate font-medium text-slate-700">{activeSource.document_title}</dd><dt className="text-slate-400">Revision</dt><dd className="font-medium text-slate-700">{activeSource.revision}</dd><dt className="text-slate-400">Status</dt><dd><span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">{activeSource.status}</span></dd><dt className="text-slate-400">Page</dt><dd className="font-medium text-slate-700">{activeSource.page}</dd><dt className="text-slate-400">Similarity</dt><dd className="font-medium text-slate-700">{(activeSource.semantic_similarity ?? activeSource.score).toFixed(3)}</dd></dl> : <EmptyPanel icon={<Info size={18} />} text="No document selected." compact />}
+        {activeSource ? <dl className="grid grid-cols-[92px_1fr] gap-x-3 gap-y-2.5 text-[11px]"><dt className="text-slate-400">Document</dt><dd className="truncate font-medium text-slate-700">{activeSource.document_title}</dd><dt className="text-slate-400">Revision</dt><dd className="font-medium text-slate-700">{activeSource.revision}</dd><dt className="text-slate-400">Status</dt><dd><span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">{activeSource.status}</span></dd><dt className="text-slate-400">Page</dt><dd className="font-medium text-slate-700">{activeSource.page}</dd><dt className="text-slate-400">Similarity</dt><dd className="font-medium text-slate-700">{(activeSource.semantic_similarity ?? activeSource.score).toFixed(3)}</dd>{activeSource.chunk_id && <><dt className="text-slate-400">Chunk ID</dt><dd className="font-medium text-slate-700">{activeSource.chunk_id}</dd></>}</dl> : <EmptyPanel icon={<Info size={18} />} text="No document selected." compact />}
       </Panel>
     </aside>
   );
@@ -275,4 +296,23 @@ function Panel({ title, subtitle, action, grow, children }: { title: string; sub
 
 function EmptyPanel({ icon, text, compact }: { icon: React.ReactNode; text: string; compact?: boolean }) {
   return <div className={`flex flex-col items-center justify-center text-center text-slate-300 ${compact ? "min-h-16" : "min-h-24"}`}><span>{icon}</span><p className="mt-2 max-w-[230px] text-[10px] leading-4">{text}</p></div>;
+}
+
+function HighlightedText({ text, query, answer }: { text: string; query: string; answer: string }) {
+  const stopWords = new Set(["what", "which", "when", "where", "does", "should", "about", "from", "that", "this", "with", "have", "into", "your", "document"]);
+  const queryTerms = (query.match(/[A-Za-z0-9]+(?:\.[0-9]+)?/g) ?? [])
+    .filter((term) => term.length >= 3 && !stopWords.has(term.toLowerCase()));
+  const answerValues = answer.match(/\b\d+(?:\.\d+)?(?:\s?(?:bar|c|n\s?m|seconds?))?\b/gi) ?? [];
+  const terms = [...new Set([...queryTerms, ...answerValues])]
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 16);
+  if (!terms.length) return <>{text}</>;
+
+  const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const matcher = new RegExp(`(${escaped.join("|")})`, "gi");
+  const normalizedTerms = new Set(terms.map((term) => term.toLowerCase()));
+
+  return <>{text.split(matcher).map((part, index) => normalizedTerms.has(part.toLowerCase())
+    ? <mark key={`${part}-${index}`} className="rounded-sm bg-yellow-200 px-0.5 text-slate-800">{part}</mark>
+    : <span key={`${part}-${index}`}>{part}</span>)}</>;
 }
